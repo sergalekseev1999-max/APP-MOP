@@ -2,8 +2,8 @@ const CACHE_NAME = 'cgg-app-cache-v1';
 const urlsToCache = [
   './index.html',
   './manifest.json',
-  './icons/icon-192x192.png',
-  './icons/icon-512x512.png'
+  './icon-192x192.png',
+  './icon-512x512.png'
 ];
 
 self.addEventListener('install', event => {
@@ -17,12 +17,16 @@ self.addEventListener('install', event => {
 
 self.addEventListener('fetch', event => {
   event.respondWith(
-    caches.match(event.request)
-      .then(response => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
+    caches.match(event.request).then(cachedResponse => {
+      const fetchPromise = fetch(event.request).then(networkResponse => {
+        caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, networkResponse.clone());
+        });
+        return networkResponse;
+      }).catch(() => {
+        return cachedResponse;
+      });
+      return cachedResponse || fetchPromise;
+    })
   );
 });

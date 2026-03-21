@@ -617,6 +617,46 @@
             if (storedD) { initialDeleted = JSON.parse(storedD); }
         } catch (e) { }
 
+        // --- НОВАЯ СВЯЗЬ С GOOGLE APPS SCRIPT ---
+        // СЮДА НУЖНО ВСТАВИТЬ НОВУЮ ССЫЛКУ WEB APP
+        window.APP_API_URL = 'https://script.google.com/macros/s/AKfycbxdCQ0usMKb6MOwwdOhs8FnWwFgQRHsM8aA8xXdFqZbVv89FQxxhpzcsOLR9qb3n_9Ldw/exec';
+
+        window.google = window.google || {};
+        window.google.script = window.google.script || {
+            run: {
+                withSuccessHandler: function(onSuccess) { this._onSuccess = onSuccess; return this; },
+                withFailureHandler: function(onFailure) { this._onFailure = onFailure; return this; },
+                _execute: function(action, args) {
+                    let self = this;
+                    if (window.APP_API_URL.includes('ВСТАВИТЬ_СЮДА')) {
+                        if(self._onFailure) self._onFailure({message: "Для загрузки базы укажите настоящую Web App ссылку в коде (строка 623)"});
+                        return;
+                    }
+                    fetch(window.APP_API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: action, payload: args }),
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data && data.success === false && data.error) {
+                            if (self._onFailure) self._onFailure({message: data.error});
+                        } else {
+                            if (self._onSuccess) self._onSuccess(data);
+                        }
+                    })
+                    .catch(err => {
+                        if (self._onFailure) self._onFailure(err);
+                    });
+                },
+                getInitialData: function(userId) { this._execute('getInitialData', {userId: userId}); },
+                toggleBookingInSheet: function(containerId, userName, action) { this._execute('toggleBookingInSheet', {containerId: containerId, userName: userName, action: action}); },
+                deleteContainerInSheet: function(containerId, userName) { this._execute('deleteContainerInSheet', {containerId: containerId, userName: userName}); },
+                restoreContainerInSheet: function(item, userName) { this._execute('restoreContainerInSheet', {item: item, userName: userName}); }
+            }
+        };
+        // ----------------------------------------
+
         window.state = {
             screen: 'main',
             userId: localStorage.getItem('ktk_user_id') || null,
