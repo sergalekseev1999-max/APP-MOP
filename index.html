@@ -61,7 +61,9 @@
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(function(OneSignal) {
       OneSignal.init({
-        appId: "7532f76f-7626-48db-b957-8b7fa626109e"
+        appId: "7532f76f-7626-48db-b957-8b7fa626109e",
+        serviceWorkerParam: { scope: "/APP-MOP/" },
+        serviceWorkerPath: "OneSignalSDKWorker.js"
       });
     });
   </script>
