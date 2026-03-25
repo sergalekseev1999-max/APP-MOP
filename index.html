@@ -59,12 +59,43 @@
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(function(OneSignal) {
-      OneSignal.init({
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
         appId: "7532f76f-7626-48db-b957-8b7fa626109e",
         serviceWorkerParam: { scope: "/APP-MOP/" },
-        serviceWorkerPath: "OneSignalSDKWorker.js"
+        serviceWorkerPath: "sw.js"
       });
+      
+      // Ловим изменения подписки
+      OneSignal.User.PushSubscription.addEventListener("change", function(event) {
+          if(OneSignal.User.PushSubscription.optedIn) {
+              alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ! Ваш телефон зарегистрирован на сервере.");
+          }
+      });
+
+      // Ждем секунду на всякий случай, чтобы статус 100% обновился
+      setTimeout(function() {
+        if (!OneSignal.User.PushSubscription.optedIn) {
+            var overlay = document.createElement('div');
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2147483647; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; color:white; font-size:24px; font-family:sans-serif; text-align:center;";
+            overlay.innerHTML = "<div style='margin:auto; padding:20px; background:#1e3a8a; border-radius:20px;'>Нажмите сюда,<br>чтобы включить ПУШИ 🔔</div>";
+            document.body.appendChild(overlay);
+            
+            function requestPush() {
+                overlay.remove();
+                try {
+                    OneSignal.User.PushSubscription.optIn().catch(function(err) {
+                        alert("Сбой OptIn: " + err);
+                    });
+                } catch(e) {
+                    alert("Ошибка: " + e.message);
+                }
+            }
+            
+            overlay.addEventListener('click', requestPush);
+            overlay.addEventListener('touchstart', requestPush);
+        }
+      }, 500);
     });
   </script>
 </head>
@@ -106,35 +137,7 @@
       loadApp();
     });
 
-    // Невидимый перехватчик первого клика (требование Apple для выдачи пушей)
-    window.OneSignalDeferred.push(function(OneSignal) {
-        var overlay = document.createElement('div');
-        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2147483647; background:transparent;";
-        
-        function requestPush() {
-            overlay.remove(); // Сразу убираем невидимый экран
-            try {
-                if (window.Notification && window.Notification.permission === 'default') {
-                    window.Notification.requestPermission().then(function(p) {
-                        if (p === 'granted' && window.OneSignal) {
-                            OneSignal.User.PushSubscription.optIn();
-                        }
-                    });
-                } else {
-                    OneSignal.Slidedown.promptPush();
-                }
-            } catch(e) {}
-        }
-        
-        // Перехватываем либо клик, либо касание (на Айфоне)
-        overlay.addEventListener('click', requestPush);
-        overlay.addEventListener('touchstart', requestPush);
-        
-        // Проверяем, подписаны ли мы уже. Если нет — вешаем экран.
-        if (!OneSignal.User.PushSubscription.optedIn) {
-            document.body.appendChild(overlay);
-        }
-    });
+
   </script>
 </body>
 </html>
