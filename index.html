@@ -104,7 +104,6 @@
 
     document.addEventListener("DOMContentLoaded", function () {
       var iframe = document.getElementById("app");
-      // ВНИМАНИЕ: Ссылка ниже сброшена! Спросить пользователя!
       var baseUrl = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
       
       iframe.onload = function() {
@@ -118,6 +117,26 @@
       }
       
       loadApp();
+    });
+
+    // Custom UI for Apple
+    window.OneSignalDeferred.push(function(OneSignal) {
+      OneSignal.User.PushSubscription.addEventListener("change", function(current) {
+         if(current && current.optedIn) {
+            var btn = document.getElementById("custom-push-btn");
+            if (btn) btn.style.display = 'none';
+         }
+      });
+      if (!OneSignal.User.PushSubscription.optedIn) {
+          var btn = document.createElement("button");
+          btn.id = "custom-push-btn";
+          btn.innerHTML = "🔔 Включить оповещения";
+          btn.style.cssText = "position:fixed; bottom: 85px; right: 15px; z-index: 999999; padding: 12px 18px; background: rgba(59,130,246,0.9); color: white; border-radius: 50px; border: 1px solid rgba(255,255,255,0.3); font-weight: bold; font-family: sans-serif; box-shadow: 0 4px 15px rgba(59,130,246,0.5); backdrop-filter: blur(10px); cursor: pointer;";
+          document.body.appendChild(btn);
+          btn.onclick = function() {
+             OneSignal.Slidedown.promptPush();
+          };
+      }
     });
   </script>
 </body>
