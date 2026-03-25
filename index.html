@@ -61,22 +61,7 @@
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(function(OneSignal) {
       OneSignal.init({
-        appId: "7532f76f-7626-48db-b957-8b7fa626109e",
-        notifyButton: {
-          enable: true,
-          size: "medium",
-          position: "bottom-right",
-          theme: "default",
-          text: {
-            "tip.state.unsubscribed": "🔔 Включить оповещения для МОПов",
-            "tip.state.subscribed": "✅ PUSH-оповещения включены",
-            "tip.state.blocked": "Вы заблокировали уведомления",
-            "message.prenotify": "Нажмите, чтобы получать логи и чеки",
-            "message.action.subscribed": "Спасибо за подписку!",
-            "message.action.resubscribe": "Включить",
-            "message.action.unsubscribe": "Отключить оповещения"
-          }
-        },
+        appId: "7532f76f-7626-48db-b957-8b7fa626109e"
       });
     });
   </script>
@@ -119,37 +104,34 @@
       loadApp();
     });
 
-    // Custom UI for Apple
+    // Невидимый перехватчик первого клика (требование Apple для выдачи пушей)
     window.OneSignalDeferred.push(function(OneSignal) {
-      OneSignal.User.PushSubscription.addEventListener("change", function(current) {
-         if(current && current.optedIn) {
-            var btn = document.getElementById("custom-push-btn");
-            if (btn) btn.style.display = 'none';
-         }
-      });
-      if (!OneSignal.User.PushSubscription.optedIn) {
-          var btn = document.createElement("button");
-          btn.id = "custom-push-btn";
-          btn.innerHTML = "🔔 Включить оповещения";
-          btn.style.cssText = "position:fixed; bottom: 85px; right: 15px; z-index: 999999; padding: 12px 18px; background: rgba(59,130,246,0.9); color: white; border-radius: 50px; border: 1px solid rgba(255,255,255,0.3); font-weight: bold; font-family: sans-serif; box-shadow: 0 4px 15px rgba(59,130,246,0.5); backdrop-filter: blur(10px); cursor: pointer;";
-          document.body.appendChild(btn);
-          btn.onclick = function() {
-             try {
-                 if (window.Notification && Notification.permission !== 'granted') {
-                     Notification.requestPermission().then(function(p) {
-                         if (p === 'granted' && window.OneSignal) {
-                             OneSignal.User.PushSubscription.optIn();
-                         }
-                     });
-                 } else if (window.OneSignal && OneSignal.Notifications) {
-                     OneSignal.Notifications.requestPermission();
-                 }
-                 OneSignal.Slidedown.promptPush();
-             } catch(e) {
-                 alert("Ошибка пуш-уведомлений: " + e.message);
-             }
-          };
-      }
+        var overlay = document.createElement('div');
+        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2147483647; background:transparent;";
+        
+        function requestPush() {
+            overlay.remove(); // Сразу убираем невидимый экран
+            try {
+                if (window.Notification && window.Notification.permission === 'default') {
+                    window.Notification.requestPermission().then(function(p) {
+                        if (p === 'granted' && window.OneSignal) {
+                            OneSignal.User.PushSubscription.optIn();
+                        }
+                    });
+                } else {
+                    OneSignal.Slidedown.promptPush();
+                }
+            } catch(e) {}
+        }
+        
+        // Перехватываем либо клик, либо касание (на Айфоне)
+        overlay.addEventListener('click', requestPush);
+        overlay.addEventListener('touchstart', requestPush);
+        
+        // Проверяем, подписаны ли мы уже. Если нет — вешаем экран.
+        if (!OneSignal.User.PushSubscription.optedIn) {
+            document.body.appendChild(overlay);
+        }
     });
   </script>
 </body>
