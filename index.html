@@ -55,7 +55,6 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     iframe { width: 100%; height: 100%; border: none; display: block; }
   </style>
-  
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -63,39 +62,27 @@
       await OneSignal.init({
         appId: "7532f76f-7626-48db-b957-8b7fa626109e",
         serviceWorkerParam: { scope: "/APP-MOP/" },
-        serviceWorkerPath: "/APP-MOP/OneSignalSDKWorker.js"
+        serviceWorkerPath: "/APP-MOP/OneSignalSDKWorker.js",
+        notifyButton: {
+          enable: true, 
+          position: 'bottom-right',
+          text: {
+            'tip.state.unsubscribed': 'Подписаться на уведомления',
+            'tip.state.subscribed': 'Вы подписаны',
+            'tip.state.blocked': 'Уведомления заблокированы'
+          }
+        }
       });
       
-      // Ловим изменения подписки
+      // Официальный стандартный вызов нативного окна подписки
+      OneSignal.Slidedown.promptPush();
+
+      // Ловим изменения подписки чисто для отладки
       OneSignal.User.PushSubscription.addEventListener("change", function(event) {
           if(OneSignal.User.PushSubscription.optedIn) {
-              alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ! Ваш телефон зарегистрирован на сервере.");
+              alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ! Телефону разрешено получать сообщения.");
           }
       });
-
-      // Ждем секунду на всякий случай, чтобы статус 100% обновился
-      setTimeout(function() {
-        if (!OneSignal.User.PushSubscription.optedIn) {
-            var overlay = document.createElement('div');
-            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:2147483647; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; color:white; font-size:24px; font-family:sans-serif; text-align:center;";
-            overlay.innerHTML = "<div style='margin:auto; padding:20px; background:#1e3a8a; border-radius:20px;'>Нажмите сюда,<br>чтобы включить ПУШИ 🔔</div>";
-            document.body.appendChild(overlay);
-            
-            function requestPush() {
-                overlay.remove();
-                try {
-                    OneSignal.User.PushSubscription.optIn().catch(function(err) {
-                        alert("Сбой OptIn: " + err);
-                    });
-                } catch(e) {
-                    alert("Ошибка: " + e.message);
-                }
-            }
-            
-            overlay.addEventListener('click', requestPush);
-            overlay.addEventListener('touchstart', requestPush);
-        }
-      }, 500);
     });
   </script>
 </head>
