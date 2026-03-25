@@ -57,6 +57,18 @@
   </style>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
+    // ШАГ 1: Вручную регистрируем Service Worker в правильном пути ДО OneSignal
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/APP-MOP/OneSignalSDKWorker.js', { scope: '/APP-MOP/' })
+        .then(function(reg) {
+          console.log('✅ SW зарегистрирован вручную, scope:', reg.scope);
+        })
+        .catch(function(err) {
+          console.error('❌ SW ошибка регистрации:', err);
+        });
+    }
+
+    // ШАГ 2: Инициализация OneSignal (он подхватит уже зарегистрированный SW)
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(async function(OneSignal) {
       await OneSignal.init({
@@ -74,10 +86,10 @@
         }
       });
       
-      // Официальный стандартный вызов нативного окна подписки
+      // Запрос подписки
       OneSignal.Slidedown.promptPush();
 
-      // Ловим изменения подписки чисто для отладки
+      // Отладка
       OneSignal.User.PushSubscription.addEventListener("change", function(event) {
           if(OneSignal.User.PushSubscription.optedIn) {
               alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ! Телефону разрешено получать сообщения.");
