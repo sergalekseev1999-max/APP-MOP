@@ -55,6 +55,7 @@ self.addEventListener('notificationclick', event => {
     // Наш кастомный data
     action = event.notification.data.action || '';
     containerId = event.notification.data.containerId || '';
+    var terminalName = event.notification.data.terminalName || '';
     // Также проверяем URL из OneSignal
     targetUrl = event.notification.data.url || event.notification.data.launchURL || '';
   }
@@ -62,7 +63,8 @@ self.addEventListener('notificationclick', event => {
   // Формируем параметры для навигации внутри PWA
   var paramParts = [];
   if (action) paramParts.push('action=' + action);
-  if (containerId && action !== 'new') paramParts.push('c=' + encodeURIComponent(containerId));
+  if (containerId && action !== 'new' && action !== 'terminal') paramParts.push('c=' + encodeURIComponent(containerId));
+  if (action === 'terminal' && terminalName) paramParts.push('t=' + encodeURIComponent(terminalName));
 
   // Если из data не удалось взять — пробуем из URL
   if (paramParts.length === 0 && targetUrl) {
