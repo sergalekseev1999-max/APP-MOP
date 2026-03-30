@@ -109,6 +109,19 @@
       }
       
       loadApp();
+
+      // Обработка глубоких ссылок от SW при клике на пуш-уведомление
+      if ('serviceWorker' in navigator && navigator.serviceWorker) {
+        navigator.serviceWorker.addEventListener('message', function(event) {
+          if (event.data && event.data.type === 'PUSH_NAVIGATE') {
+            var pushParams = event.data.params || '';
+            // Перезагружаем iframe с нужными параметрами
+            var sep = pushParams ? '&' : '?';
+            iframe.src = baseUrl + pushParams + sep + 'nocache=' + Date.now();
+            document.getElementById("loading").style.display = "flex";
+          }
+        });
+      }
     });
 
 
