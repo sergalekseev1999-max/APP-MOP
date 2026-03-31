@@ -169,6 +169,16 @@
           }
         });
       }
+
+      // Принудительное обновление Service Worker при каждом запуске
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+          .then(function(reg) {
+            // Проверяем обновления SW немедленно
+            reg.update();
+          })
+          .catch(function() {});
+      }
     });
   </script>
 </body>

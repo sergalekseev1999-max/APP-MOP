@@ -1,18 +1,19 @@
-const CACHE_NAME = 'cgg-app-cache-v3';
+// CACHE v5 — форсированный сброс старого кэша
+const CACHE_NAME = 'cgg-app-cache-v5';
 const urlsToCache = [
-  './index.html',
   './manifest.json',
-  './icon-192x192.png',
-  './icon-512x512.png'
+  './icon-192.png',
+  './icon-512.png'
 ];
+// ВАЖНО: index.html НЕ кэшируем — всегда берём из сети!
+// Старый SW кэшировал index.html и отдавал устаревшую версию,
+// из-за чего двухуровневая авторизация не работала.
 
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => {
-        return cache.addAll(urlsToCache);
-      })
+      .then(cache => cache.addAll(urlsToCache))
   );
 });
 
@@ -27,17 +28,36 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  var url = event.request.url;
+
+  // index.html и навигационные запросы — ВСЕГДА из сети (network-first)
+  if (url.includes('index.html') || event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Успешно получили из сети — обновляем кэш
+          var clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => {
+          // Нет сети — отдаём из кэша (offline fallback)
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
+  // Остальные ресурсы (иконки, манифест) — cache-first
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
-      const fetchPromise = fetch(event.request).then(networkResponse => {
+      if (cachedResponse) return cachedResponse;
+      return fetch(event.request).then(networkResponse => {
         caches.open(CACHE_NAME).then(cache => {
           cache.put(event.request, networkResponse.clone());
         });
         return networkResponse;
-      }).catch(() => {
-        return cachedResponse;
       });
-      return cachedResponse || fetchPromise;
     })
   );
 });
