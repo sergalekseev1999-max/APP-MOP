@@ -92,39 +92,84 @@
   </div>
 
   <script>
+    // ============================================================
+    // ДВУХУРОВНЕВАЯ АВТОРИЗАЦИЯ
+    // ============================================================
+    // Домен github.io СТАБИЛЕН — localStorage здесь НИКОГДА не теряется.
+    // Домен googleusercontent.com (GAS iframe) НЕСТАБИЛЕН — поддомен
+    // меняется при каждом деплое, localStorage теряется.
+    //
+    // Поэтому userId хранится ЗДЕСЬ (в оболочке PWA) и передаётся
+    // в iframe через URL параметр uid=XXX при каждой загрузке.
+    // Iframe сообщает о логине/выходе через postMessage.
+    // ============================================================
 
+    var GAS_BASE_URL = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
+
+    // Построить URL для iframe с нужными параметрами
+    function buildIframeUrl(extraParams) {
+      var parts = [];
+      
+      // Параметры из адресной строки (пуш-уведомления и т.д.)
+      var locationParams = extraParams || window.location.search || '';
+      if (locationParams && locationParams.charAt(0) === '?') {
+        parts.push(locationParams.substring(1));
+      } else if (locationParams) {
+        parts.push(locationParams);
+      }
+
+      // userId из localStorage оболочки → в URL параметр uid
+      var savedUserId = localStorage.getItem('pwa_user_id') || '';
+      if (savedUserId) {
+        parts.push('uid=' + encodeURIComponent(savedUserId));
+      }
+
+      // Антикэш
+      parts.push('nocache=' + Date.now());
+
+      return GAS_BASE_URL + '?' + parts.join('&');
+    }
 
     document.addEventListener("DOMContentLoaded", function () {
       var iframe = document.getElementById("app");
-      var baseUrl = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
       
       iframe.onload = function() {
         document.getElementById("loading").style.display = "none";
       };
 
-      function loadApp() {
-        var params = window.location.search || '';
-        var separator = params ? "&" : "?";
-        iframe.src = baseUrl + params + separator + "nocache=" + Date.now();
-      }
-      
-      loadApp();
+      // Загрузка приложения
+      iframe.src = buildIframeUrl();
 
+      // ============================================================
+      // СЛУШАЕМ postMessage ОТ IFRAME (логин / выход)
+      // ============================================================
+      window.addEventListener('message', function(event) {
+        if (!event.data || !event.data.type) return;
+
+        if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
+          // Пользователь залогинился в iframe → сохраняем в НАШЕ хранилище
+          localStorage.setItem('pwa_user_id', String(event.data.userId));
+        }
+
+        if (event.data.type === 'AUTH_LOGOUT') {
+          // Пользователь вышел из iframe → удаляем из НАШЕГО хранилища
+          localStorage.removeItem('pwa_user_id');
+        }
+      });
+
+      // ============================================================
       // Обработка глубоких ссылок от SW при клике на пуш-уведомление
+      // ============================================================
       if ('serviceWorker' in navigator && navigator.serviceWorker) {
         navigator.serviceWorker.addEventListener('message', function(event) {
           if (event.data && event.data.type === 'PUSH_NAVIGATE') {
             var pushParams = event.data.params || '';
-            // Перезагружаем iframe с нужными параметрами
-            var sep = pushParams ? '&' : '?';
-            iframe.src = baseUrl + pushParams + sep + 'nocache=' + Date.now();
+            iframe.src = buildIframeUrl(pushParams);
             document.getElementById("loading").style.display = "flex";
           }
         });
       }
     });
-
-
   </script>
 </body>
 </html>
