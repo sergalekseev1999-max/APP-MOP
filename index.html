@@ -164,8 +164,13 @@
         navigator.serviceWorker.addEventListener('message', function(event) {
           if (event.data && event.data.type === 'PUSH_NAVIGATE') {
             var pushParams = event.data.params || '';
-            iframe.src = buildIframeUrl(pushParams);
-            document.getElementById("loading").style.display = "flex";
+            // Отправляем команду внутрь GAS iframe без его перезагрузки
+            if (iframe && iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'PWA_PUSH_ACTION',
+                params: pushParams
+              }, '*');
+            }
           }
         });
       }
