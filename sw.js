@@ -1,13 +1,14 @@
-// CACHE v5 — форсированный сброс старого кэша
-const CACHE_NAME = 'cgg-app-cache-v5';
+// CACHE v6 — объединённый SW с OneSignal
+const CACHE_NAME = 'cgg-app-cache-v6';
 const urlsToCache = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
 ];
 // ВАЖНО: index.html НЕ кэшируем — всегда берём из сети!
-// Старый SW кэшировал index.html и отдавал устаревшую версию,
-// из-за чего двухуровневая авторизация не работала.
+
+// Подключаем OneSignal SDK Worker
+importScripts("https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js");
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -35,20 +36,18 @@ self.addEventListener('fetch', event => {
     event.respondWith(
       fetch(event.request)
         .then(response => {
-          // Успешно получили из сети — обновляем кэш
           var clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
         })
         .catch(() => {
-          // Нет сети — отдаём из кэша (offline fallback)
           return caches.match(event.request);
         })
     );
     return;
   }
 
-  // Остальные ресурсы (иконки, манифест) — cache-first
+  // Остальные ресурсы — cache-first
   event.respondWith(
     caches.match(event.request).then(cachedResponse => {
       if (cachedResponse) return cachedResponse;
@@ -62,21 +61,21 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// === ОБРАБОТКА ПУША: клик на уведомление открывает PWA, а не браузер ===
+// === ОБРАБОТКА КЛИКА ПО ПУШУ ===
+// Перехватываем клик РАНЬШЕ OneSignal и направляем в PWA
 self.addEventListener('notificationclick', event => {
   event.notification.close();
 
-  // Извлекаем action и containerId из data-поля пуша (приоритет)
+  // Извлекаем action и containerId из data-поля пуша
   var action = '';
   var containerId = '';
+  var terminalName = '';
   var targetUrl = '';
 
   if (event.notification.data) {
-    // Наш кастомный data
     action = event.notification.data.action || '';
     containerId = event.notification.data.containerId || '';
-    var terminalName = event.notification.data.terminalName || '';
-    // Также проверяем URL из OneSignal
+    terminalName = event.notification.data.terminalName || '';
     targetUrl = event.notification.data.url || event.notification.data.launchURL || '';
   }
 
@@ -100,24 +99,29 @@ self.addEventListener('notificationclick', event => {
     }
   }
 
-  var params = paramParts.length > 0 ? '?' + paramParts.join('&') : '';
+  // Если ничего не нашли — ставим action=new по умолчанию (безопаснее чем main)
+  if (paramParts.length === 0) {
+    paramParts.push('action=new');
+  }
 
-  // Собираем правильный URL для PWA (всегда наш index.html)
+  var params = '?' + paramParts.join('&');
+
+  // Собираем URL для PWA (всегда наш index.html)
   var appUrl = self.location.origin + self.location.pathname.replace('sw.js', 'index.html') + params;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      // Сначала пробуем найти уже открытое окно PWA
+      // Ищем уже открытое окно PWA
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
         if (client.url.includes('index.html') || client.url.includes('APP-MOP')) {
-          // PWA уже открыто — фокусируемся и передаём параметры
+          // PWA уже открыто — передаём параметры через postMessage
           client.postMessage({ type: 'PUSH_NAVIGATE', params: params });
           return client.focus();
         }
       }
-      // PWA не открыто — открываем новое окно с нашим URL
+      // PWA не открыто — открываем новое окно
       return clients.openWindow(appUrl);
     })
   );
-});
+}, false); // false = наш обработчик первый, до OneSignal
