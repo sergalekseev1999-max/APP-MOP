@@ -23,7 +23,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: 100%; height: 100%;
-      background: #000000;
+      background: #0b1120;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }
@@ -40,7 +40,7 @@
       position: absolute; inset: 0;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      background: radial-gradient(ellipse at top, #1e3a8a, #000000);
+      background: radial-gradient(ellipse at top, #1e3a8a, #0b1120);
       color: #e2e8f0;
       z-index: 10;
     }
@@ -54,14 +54,18 @@
     }
     #loading p { font-size: 14px; color: #94a3b8; font-weight: bold; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    iframe { width: 100%; height: 100%; border: none; display: block; }
-    .retry-btn {
-      margin-top: 20px; padding: 14px 32px;
-      background: linear-gradient(135deg, #3b82f6, #6366f1);
-      color: white; border: none; border-radius: 14px;
-      font-size: 15px; font-weight: 700; cursor: pointer;
-      box-shadow: 0 4px 15px rgba(59,130,246,0.4);
+    iframe { width: 100%; height: 100%; border: none; display: block; background: #16161a; }
+    /* === DIAGNOSTIC PANEL === */
+    #diag {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.95); color: #4ade80;
+      font: 11px/1.5 monospace; padding: 10px 12px;
+      z-index: 99999; max-height: 45vh; overflow-y: auto;
+      border-top: 2px solid #22c55e;
     }
+    #diag .err { color: #f87171; }
+    #diag .warn { color: #fbbf24; }
+    #diag .title { color: #60a5fa; font-weight: bold; font-size: 13px; margin-bottom: 6px; }
   </style>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
@@ -72,37 +76,61 @@
           await OneSignal.init({
             appId: "7532f76f-7626-48db-b957-8b7fa626109e",
             notifyButton: {
-              enable: true, 
-              position: 'bottom-right',
-              text: {
-                'tip.state.unsubscribed': 'Подписаться на уведомления',
-                'tip.state.subscribed': 'Вы подписаны',
-                'tip.state.blocked': 'Уведомления заблокированы'
-              }
+              enable: true, position: 'bottom-right',
+              text: { 'tip.state.unsubscribed': 'Подписаться', 'tip.state.subscribed': 'Подписаны', 'tip.state.blocked': 'Заблокированы' }
             }
           });
           OneSignal.Slidedown.promptPush();
           OneSignal.User.PushSubscription.addEventListener("change", function(event) {
-              if(OneSignal.User.PushSubscription.optedIn) {
-                  alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ!");
-              }
+              if(OneSignal.User.PushSubscription.optedIn) alert("✅ ПУШИ ПОДКЛЮЧЕНЫ!");
           });
-        } catch(e) { console.error('OneSignal init error:', e); }
+        } catch(e) { console.error('OS err:', e); }
       });
-    } catch(e) { console.error('OneSignal setup error:', e); }
+    } catch(e) {}
   </script>
 </head>
 <body>
+  <!-- BUILD: diag-v3-20260709 -->
   <div class="safe-wrapper">
     <div id="loading">
       <div class="spinner"></div>
-      <p id="loading-text">Запуск приложения...</p>
+      <p>Запуск приложения...</p>
     </div>
     <iframe id="app" allow="camera; microphone; clipboard-read; clipboard-write; geolocation; storage-access" style="flex:1; width:100%; border:none; display:block;"></iframe>
   </div>
 
-  <script>
+  <!-- DIAGNOSTIC PANEL — always visible to debug black screen -->
+  <div id="diag">
+    <div class="title">🔍 ДИАГНОСТИКА ЧЕРНОГО ЭКРАНА (v3)</div>
+    <div id="diag-log"></div>
+  </div>
 
+  <script>
+    // ==========================================
+    // DIAGNOSTIC LOGGER
+    // ==========================================
+    var _dlog = document.getElementById('diag-log');
+    var _diagStart = Date.now();
+    function diag(msg, cls) {
+      var t = ((Date.now() - _diagStart) / 1000).toFixed(1);
+      var d = document.createElement('div');
+      if (cls) d.className = cls;
+      d.textContent = '[' + t + 's] ' + msg;
+      _dlog.appendChild(d);
+      _dlog.scrollTop = _dlog.scrollHeight;
+    }
+
+    // ==========================================
+    // DETECT MODE
+    // ==========================================
+    var isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+    diag('Mode: ' + (isStandalone ? 'STANDALONE (PWA)' : 'BROWSER'));
+    diag('UA: ' + navigator.userAgent.substring(0, 80));
+    diag('Screen: ' + screen.width + 'x' + screen.height + ' | Viewport: ' + window.innerWidth + 'x' + window.innerHeight);
+
+    // ==========================================
+    // SAFE STORAGE
+    // ==========================================
     var safeStorage = {
         data: {},
         getItem: function(key) {
@@ -119,111 +147,146 @@
         }
     };
 
+    // Test localStorage
+    try {
+      window.localStorage.setItem('_test', '1');
+      window.localStorage.removeItem('_test');
+      diag('localStorage: ✅ OK');
+    } catch(e) {
+      diag('localStorage: ❌ BLOCKED — ' + e.message, 'err');
+    }
+
+    // ==========================================
+    // GAS URL
+    // ==========================================
     var GAS_BASE_URL = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
 
     function buildIframeUrl(extraParams) {
       var parts = [];
       var locationParams = extraParams || window.location.search || '';
-      if (locationParams && locationParams.charAt(0) === '?') {
-        parts.push(locationParams.substring(1));
-      } else if (locationParams) {
-        parts.push(locationParams);
-      }
+      if (locationParams && locationParams.charAt(0) === '?') parts.push(locationParams.substring(1));
+      else if (locationParams) parts.push(locationParams);
       var savedUserId = safeStorage.getItem('pwa_user_id') || '';
-      if (savedUserId) {
-        parts.push('uid=' + encodeURIComponent(savedUserId));
-      }
+      if (savedUserId) parts.push('uid=' + encodeURIComponent(savedUserId));
       parts.push('nocache=' + Date.now());
       return GAS_BASE_URL + '?' + parts.join('&');
     }
 
+    // ==========================================
+    // TEST: Can we fetch GAS URL?
+    // ==========================================
+    diag('Testing fetch to GAS URL...');
+    fetch(GAS_BASE_URL + '?nocache=' + Date.now(), { mode: 'no-cors' })
+      .then(function(r) {
+        diag('Fetch GAS: ✅ status=' + r.status + ' type=' + r.type);
+      })
+      .catch(function(e) {
+        diag('Fetch GAS: ❌ FAILED — ' + e.message, 'err');
+      });
+
+    // ==========================================
+    // MAIN LOGIC
+    // ==========================================
     document.addEventListener("DOMContentLoaded", function () {
+      diag('DOMContentLoaded fired');
+
       var iframe = document.getElementById("app");
       var loadingEl = document.getElementById("loading");
-      var loadingText = document.getElementById("loading-text");
-      var iframeLoaded = false;
-      var retryCount = 0;
-      var maxRetries = 3;
       var appUrl = buildIframeUrl();
 
-      // === HEARTBEAT: GAS page sends postMessage when alive ===
-      var heartbeatReceived = false;
+      diag('iframe.src → ' + appUrl.substring(0, 90) + '...');
+
+      // Track heartbeats from GAS
+      var heartbeatCount = 0;
       window.addEventListener('message', function(event) {
         if (!event.data || !event.data.type) return;
-
-        // Heartbeat from GAS page
         if (event.data.type === 'GAS_HEARTBEAT') {
-          heartbeatReceived = true;
+          heartbeatCount++;
+          if (heartbeatCount === 1) diag('GAS Heartbeat: ✅ RECEIVED (JS in iframe works!!)');
         }
-
-        // Auth events
         if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
           safeStorage.setItem('pwa_user_id', String(event.data.userId));
+          diag('AUTH_LOGIN: userId=' + event.data.userId);
         }
         if (event.data.type === 'AUTH_LOGOUT') {
           safeStorage.removeItem('pwa_user_id');
         }
       });
 
+      // Set iframe src
       iframe.onload = function() {
-        iframeLoaded = true;
-        // Don't hide loading yet — wait for heartbeat from GAS
-        // or hide after a short delay
+        diag('iframe.onload: ✅ fired (HTML loaded into iframe)');
+
+        // Check iframe dimensions
+        try {
+          diag('iframe size: ' + iframe.offsetWidth + 'x' + iframe.offsetHeight);
+        } catch(e) {}
+
+        // Try to access iframe content (will fail cross-origin)
+        try {
+          var doc = iframe.contentDocument;
+          diag('iframe.contentDocument: ✅ accessible (same-origin)', 'warn');
+        } catch(e) {
+          diag('iframe.contentDocument: ❌ blocked (cross-origin) — EXPECTED');
+        }
+
+        // Hide loading after 2s
         setTimeout(function() {
           loadingEl.style.display = "none";
-        }, 1500);
+          diag('Loading spinner hidden');
+        }, 2000);
       };
 
-      function tryLoadIframe() {
-        retryCount++;
-        loadingText.textContent = retryCount > 1 ? 'Повторная загрузка (' + retryCount + ')...' : 'Запуск приложения...';
-        iframeLoaded = false;
-        heartbeatReceived = false;
-        iframe.src = buildIframeUrl();
-      }
+      iframe.onerror = function(e) {
+        diag('iframe.onerror: ❌ ' + String(e), 'err');
+      };
 
-      // Initial load
-      tryLoadIframe();
+      // Load the iframe
+      iframe.src = appUrl;
+      diag('iframe.src SET');
 
-      // === AUTO-RETRY: if no heartbeat after 10s, reload iframe ===
-      setInterval(function() {
-        if (!heartbeatReceived && retryCount <= maxRetries) {
-          // No heartbeat — iframe content is dead, retry
-          tryLoadIframe();
-        }
-      }, 10000);
-
-      // === FALLBACK: after all retries, show manual button ===
+      // Check at 5s
       setTimeout(function() {
-        if (!heartbeatReceived) {
-          loadingEl.innerHTML = 
-            '<p style="font-size:16px;color:#e2e8f0;font-weight:bold;text-align:center;margin-bottom:8px;">Не удалось загрузить</p>' +
-            '<p style="font-size:12px;color:#94a3b8;text-align:center;max-width:280px;margin-bottom:16px;">Попробуйте перезагрузить</p>' +
-            '<button class="retry-btn" onclick="location.reload()">🔄 Перезагрузить</button>';
-          loadingEl.style.display = "flex";
+        diag('--- 5s CHECK ---');
+        diag('Heartbeats received: ' + heartbeatCount);
+        if (heartbeatCount === 0) {
+          diag('⚠️ NO heartbeat — GAS JavaScript is NOT running in iframe!', 'warn');
+          diag('This means iOS is blocking JS execution in cross-origin iframe', 'warn');
+        } else {
+          diag('✅ GAS page is alive and running JS');
         }
-      }, 35000);
+      }, 5000);
 
-      // Deep links from SW
+      // Check at 15s
+      setTimeout(function() {
+        diag('--- 15s CHECK ---');
+        diag('Total heartbeats: ' + heartbeatCount);
+        if (heartbeatCount === 0) {
+          diag('❌ CONFIRMED: JS blocked in iframe. This is the BLACK SCREEN cause.', 'err');
+          diag('iOS standalone PWA blocks cross-origin iframe JavaScript.', 'err');
+        }
+      }, 15000);
+
+      // SW + deep links
       if ('serviceWorker' in navigator && navigator.serviceWorker) {
         navigator.serviceWorker.addEventListener('message', function(event) {
           if (event.data && event.data.type === 'PUSH_NAVIGATE') {
-            var pushParams = event.data.params || '';
             if (iframe && iframe.contentWindow) {
-              iframe.contentWindow.postMessage({
-                type: 'PWA_PUSH_ACTION',
-                params: pushParams
-              }, '*');
+              iframe.contentWindow.postMessage({ type: 'PWA_PUSH_ACTION', params: event.data.params || '' }, '*');
             }
           }
         });
       }
 
-      // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-          .then(function(reg) { reg.update(); })
-          .catch(function() {});
+          .then(function(reg) { 
+            reg.update();
+            diag('SW: ✅ registered');
+          })
+          .catch(function(e) { 
+            diag('SW: ❌ ' + e.message, 'err');
+          });
       }
     });
   </script>
