@@ -29,8 +29,9 @@
     }
     .safe-wrapper {
       width: 100vw; height: 100vh;
-      padding-top: env(safe-area-inset-top, 20px);
-      padding-bottom: env(safe-area-inset-bottom, 20px);
+      height: 100dvh;
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
@@ -54,32 +55,68 @@
     #loading p { font-size: 14px; color: #94a3b8; font-weight: bold; }
     @keyframes spin { to { transform: rotate(360deg); } }
     iframe { width: 100%; height: 100%; border: none; display: block; }
+    .fallback-btn {
+      margin-top: 20px;
+      padding: 14px 32px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(59,130,246,0.4);
+    }
+    .fallback-link {
+      margin-top: 14px;
+      color: #60a5fa;
+      font-size: 12px;
+      text-decoration: underline;
+    }
+    .debug-log {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      max-height: 30vh;
+      overflow-y: auto;
+      background: rgba(0,0,0,0.95);
+      color: #4ade80;
+      font-size: 10px;
+      font-family: monospace;
+      padding: 8px;
+      z-index: 9999;
+      display: none;
+    }
   </style>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.init({
-        appId: "7532f76f-7626-48db-b957-8b7fa626109e",
-        notifyButton: {
-          enable: true, 
-          position: 'bottom-right',
-          text: {
-            'tip.state.unsubscribed': 'Подписаться на уведомления',
-            'tip.state.subscribed': 'Вы подписаны',
-            'tip.state.blocked': 'Уведомления заблокированы'
-          }
-        }
-      });
-      
-      OneSignal.Slidedown.promptPush();
+    try {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          await OneSignal.init({
+            appId: "7532f76f-7626-48db-b957-8b7fa626109e",
+            notifyButton: {
+              enable: true, 
+              position: 'bottom-right',
+              text: {
+                'tip.state.unsubscribed': 'Подписаться на уведомления',
+                'tip.state.subscribed': 'Вы подписаны',
+                'tip.state.blocked': 'Уведомления заблокированы'
+              }
+            }
+          });
+          
+          OneSignal.Slidedown.promptPush();
 
-      OneSignal.User.PushSubscription.addEventListener("change", function(event) {
-          if(OneSignal.User.PushSubscription.optedIn) {
-              alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ!");
-          }
+          OneSignal.User.PushSubscription.addEventListener("change", function(event) {
+              if(OneSignal.User.PushSubscription.optedIn) {
+                  alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ!");
+              }
+          });
+        } catch(e) { console.error('OneSignal init error:', e); }
       });
-    });
+    } catch(e) { console.error('OneSignal setup error:', e); }
   </script>
 </head>
 <body>
@@ -88,11 +125,29 @@
       <div class="spinner"></div>
       <p>Запуск приложения...</p>
     </div>
-    <iframe id="app" allow="camera; microphone; clipboard-read; clipboard-write; geolocation" style="flex:1; width:100%; border:none; display:block;"></iframe>
+    <iframe id="app" allow="camera; microphone; clipboard-read; clipboard-write; geolocation; storage-access" style="flex:1; width:100%; border:none; display:block;"></iframe>
   </div>
+  <div id="debug-log" class="debug-log"></div>
 
   <script>
 
+    // ============================================================
+    // DEBUG LOG (visible only with ?debug=1 in URL)
+    // ============================================================
+    var _showDebug = window.location.search.indexOf('debug=1') !== -1;
+    var _debugEl = document.getElementById('debug-log');
+    if (_showDebug && _debugEl) _debugEl.style.display = 'block';
+    function dbg(msg) {
+      console.log('[PWA] ' + msg);
+      if (_debugEl && _showDebug) {
+        _debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ' ' + msg + '</div>';
+        _debugEl.scrollTop = _debugEl.scrollHeight;
+      }
+    }
+
+    // ============================================================
+    // SAFE STORAGE
+    // ============================================================
     var safeStorage = {
         data: {},
         getItem: function(key) {
@@ -110,24 +165,20 @@
     };
 
     // ============================================================
-    // ДВУХУРОВНЕВАЯ АВТОРИЗАЦИЯ
+    // DETECT STANDALONE MODE (PWA on home screen)
     // ============================================================
-    // Домен github.io СТАБИЛЕН — localStorage здесь НИКОГДА не теряется.
-    // Домен googleusercontent.com (GAS iframe) НЕСТАБИЛЕН — поддомен
-    // меняется при каждом деплое, localStorage теряется.
-    //
-    // Поэтому userId хранится ЗДЕСЬ (в оболочке PWA) и передаётся
-    // в iframe через URL параметр uid=XXX при каждой загрузке.
-    // Iframe сообщает о логине/выходе через postMessage.
-    // ============================================================
+    var isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
+    dbg('standalone=' + isStandalone + ' ua=' + navigator.userAgent.substring(0, 60));
 
+    // ============================================================
+    // GAS URL
+    // ============================================================
     var GAS_BASE_URL = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
 
-    // Построить URL для iframe с нужными параметрами
+    // Build URL with params
     function buildIframeUrl(extraParams) {
       var parts = [];
       
-      // Параметры из адресной строки (пуш-уведомления и т.д.)
       var locationParams = extraParams || window.location.search || '';
       if (locationParams && locationParams.charAt(0) === '?') {
         parts.push(locationParams.substring(1));
@@ -135,53 +186,101 @@
         parts.push(locationParams);
       }
 
-      // userId из localStorage оболочки → в URL параметр uid
+      // userId from PWA shell localStorage → URL param uid
       var savedUserId = safeStorage.getItem('pwa_user_id') || '';
       if (savedUserId) {
         parts.push('uid=' + encodeURIComponent(savedUserId));
       }
 
-      // Антикэш
+      // Anti-cache
       parts.push('nocache=' + Date.now());
 
       return GAS_BASE_URL + '?' + parts.join('&');
     }
 
+    // ============================================================
+    // MAIN LOGIC
+    // ============================================================
     document.addEventListener("DOMContentLoaded", function () {
       var iframe = document.getElementById("app");
-      
+      var loadingEl = document.getElementById("loading");
+      var appUrl = buildIframeUrl();
+
+      dbg('DOMContentLoaded. Building URL...');
+      dbg('URL=' + appUrl.substring(0, 80) + '...');
+
+      // ========================================================
+      // STANDALONE MODE: redirect directly to GAS URL
+      // iOS blocks cross-origin iframes in standalone PWA WebView.
+      // The ONLY reliable fix is to NOT use an iframe.
+      // ========================================================
+      if (isStandalone) {
+        dbg('STANDALONE mode detected → redirecting to GAS URL');
+        // Register SW first (for push notifications)
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function(){});
+        }
+        // Redirect to GAS directly — no iframe, no black screen
+        window.location.replace(appUrl);
+        return;
+      }
+
+      // ========================================================
+      // BROWSER MODE: use iframe as before
+      // ========================================================
+      dbg('BROWSER mode → loading in iframe');
+
+      var iframeLoaded = false;
+
       iframe.onload = function() {
-        document.getElementById("loading").style.display = "none";
+        dbg('iframe.onload fired');
+        iframeLoaded = true;
+        loadingEl.style.display = "none";
       };
 
-      // Загрузка приложения
-      iframe.src = buildIframeUrl();
+      iframe.onerror = function(e) {
+        dbg('iframe.onerror: ' + (e && e.message || 'unknown'));
+      };
+
+      // Fallback timeout: if iframe doesn't load within 12 seconds
+      setTimeout(function() {
+        if (!iframeLoaded) {
+          dbg('TIMEOUT: iframe not loaded after 12s, showing fallback');
+          loadingEl.innerHTML = 
+            '<p style="font-size:16px;color:#e2e8f0;font-weight:bold;text-align:center;margin-bottom:8px;">Загрузка занимает больше времени</p>' +
+            '<p style="font-size:12px;color:#94a3b8;text-align:center;max-width:280px;">Возможно, проблема с подключением. Нажмите кнопку ниже.</p>' +
+            '<button class="fallback-btn" onclick="document.getElementById(\'app\').src=buildIframeUrl()">🔄 Повторить загрузку</button>' +
+            '<a href="' + GAS_BASE_URL + '" class="fallback-link" target="_blank">Открыть напрямую →</a>';
+        }
+      }, 12000);
+
+      // Load iframe
+      iframe.src = appUrl;
 
       // ============================================================
-      // СЛУШАЕМ postMessage ОТ IFRAME (логин / выход)
+      // LISTEN postMessage FROM IFRAME (login / logout)
       // ============================================================
       window.addEventListener('message', function(event) {
         if (!event.data || !event.data.type) return;
 
         if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
-          // Пользователь залогинился в iframe → сохраняем в НАШЕ хранилище
           safeStorage.setItem('pwa_user_id', String(event.data.userId));
+          dbg('AUTH_LOGIN userId=' + event.data.userId);
         }
 
         if (event.data.type === 'AUTH_LOGOUT') {
-          // Пользователь вышел из iframe → удаляем из НАШЕГО хранилища
           safeStorage.removeItem('pwa_user_id');
+          dbg('AUTH_LOGOUT');
         }
       });
 
       // ============================================================
-      // Обработка глубоких ссылок от SW при клике на пуш-уведомление
+      // Deep links from SW (push notification click)
       // ============================================================
       if ('serviceWorker' in navigator && navigator.serviceWorker) {
         navigator.serviceWorker.addEventListener('message', function(event) {
           if (event.data && event.data.type === 'PUSH_NAVIGATE') {
             var pushParams = event.data.params || '';
-            // Отправляем команду внутрь GAS iframe без его перезагрузки
             if (iframe && iframe.contentWindow) {
               iframe.contentWindow.postMessage({
                 type: 'PWA_PUSH_ACTION',
@@ -192,11 +291,10 @@
         });
       }
 
-      // Принудительное обновление Service Worker при каждом запуске
+      // Force update Service Worker on every launch
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
           .then(function(reg) {
-            // Проверяем обновления SW немедленно
             reg.update();
           })
           .catch(function() {});
