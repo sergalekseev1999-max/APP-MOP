@@ -92,6 +92,23 @@
   </div>
 
   <script>
+
+    var safeStorage = {
+        data: {},
+        getItem: function(key) {
+            try { return safeStorage.getItem(key); }
+            catch(e) { return this.data[key] || null; }
+        },
+        setItem: function(key, val) {
+            try { safeStorage.setItem(key, val); }
+            catch(e) { this.data[key] = String(val); }
+        },
+        removeItem: function(key) {
+            try { safeStorage.removeItem(key); }
+            catch(e) { delete this.data[key]; }
+        }
+    };
+
     // ============================================================
     // ДВУХУРОВНЕВАЯ АВТОРИЗАЦИЯ
     // ============================================================
@@ -119,7 +136,7 @@
       }
 
       // userId из localStorage оболочки → в URL параметр uid
-      var savedUserId = localStorage.getItem('pwa_user_id') || '';
+      var savedUserId = safeStorage.getItem('pwa_user_id') || '';
       if (savedUserId) {
         parts.push('uid=' + encodeURIComponent(savedUserId));
       }
@@ -148,12 +165,12 @@
 
         if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
           // Пользователь залогинился в iframe → сохраняем в НАШЕ хранилище
-          localStorage.setItem('pwa_user_id', String(event.data.userId));
+          safeStorage.setItem('pwa_user_id', String(event.data.userId));
         }
 
         if (event.data.type === 'AUTH_LOGOUT') {
           // Пользователь вышел из iframe → удаляем из НАШЕГО хранилища
-          localStorage.removeItem('pwa_user_id');
+          safeStorage.removeItem('pwa_user_id');
         }
       });
 
