@@ -1,5 +1,5 @@
-// CACHE v6 — объединённый SW с OneSignal
-const CACHE_NAME = 'cgg-app-cache-v6';
+// CACHE v7 — объединённый SW с OneSignal
+const CACHE_NAME = 'cgg-app-cache-v7';
 const urlsToCache = [
   './manifest.json',
   './icon-192.png',
