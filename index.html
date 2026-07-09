@@ -96,15 +96,15 @@
     var safeStorage = {
         data: {},
         getItem: function(key) {
-            try { return safeStorage.getItem(key); }
+            try { return window.localStorage.getItem(key); }
             catch(e) { return this.data[key] || null; }
         },
         setItem: function(key, val) {
-            try { safeStorage.setItem(key, val); }
+            try { window.localStorage.setItem(key, val); }
             catch(e) { this.data[key] = String(val); }
         },
         removeItem: function(key) {
-            try { safeStorage.removeItem(key); }
+            try { window.localStorage.removeItem(key); }
             catch(e) { delete this.data[key]; }
         }
     };
