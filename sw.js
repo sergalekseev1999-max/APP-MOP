@@ -1,5 +1,5 @@
-// CACHE v7 — объединённый SW с OneSignal
-const CACHE_NAME = 'cgg-app-cache-v7';
+// CACHE v8 — FIX: skip cross-origin requests
+const CACHE_NAME = 'cgg-app-cache-v8';
 const urlsToCache = [
   './manifest.json',
   './icon-192.png',
@@ -30,6 +30,12 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   var url = event.request.url;
+
+  // === КРИТИЧНО: НЕ трогать cross-origin запросы ===
+  // Без этого SW перехватывает навигацию iframe к Google и ломает её
+  if (!url.startsWith(self.location.origin)) {
+    return; // Браузер обработает сам
+  }
 
   // index.html и навигационные запросы — ВСЕГДА из сети (network-first)
   if (url.includes('index.html') || event.request.mode === 'navigate') {
