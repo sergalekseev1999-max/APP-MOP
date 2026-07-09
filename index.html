@@ -55,37 +55,12 @@
     #loading p { font-size: 14px; color: #94a3b8; font-weight: bold; }
     @keyframes spin { to { transform: rotate(360deg); } }
     iframe { width: 100%; height: 100%; border: none; display: block; }
-    .fallback-btn {
-      margin-top: 20px;
-      padding: 14px 32px;
+    .retry-btn {
+      margin-top: 20px; padding: 14px 32px;
       background: linear-gradient(135deg, #3b82f6, #6366f1);
-      color: white;
-      border: none;
-      border-radius: 14px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      letter-spacing: 0.5px;
+      color: white; border: none; border-radius: 14px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
       box-shadow: 0 4px 15px rgba(59,130,246,0.4);
-    }
-    .fallback-link {
-      margin-top: 14px;
-      color: #60a5fa;
-      font-size: 12px;
-      text-decoration: underline;
-    }
-    .debug-log {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      max-height: 30vh;
-      overflow-y: auto;
-      background: rgba(0,0,0,0.95);
-      color: #4ade80;
-      font-size: 10px;
-      font-family: monospace;
-      padding: 8px;
-      z-index: 9999;
-      display: none;
     }
   </style>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
@@ -106,9 +81,7 @@
               }
             }
           });
-          
           OneSignal.Slidedown.promptPush();
-
           OneSignal.User.PushSubscription.addEventListener("change", function(event) {
               if(OneSignal.User.PushSubscription.optedIn) {
                   alert("✅ ПУШИ УСПЕШНО ПОДКЛЮЧЕНЫ!");
@@ -123,31 +96,13 @@
   <div class="safe-wrapper">
     <div id="loading">
       <div class="spinner"></div>
-      <p>Запуск приложения...</p>
+      <p id="loading-text">Запуск приложения...</p>
     </div>
     <iframe id="app" allow="camera; microphone; clipboard-read; clipboard-write; geolocation; storage-access" style="flex:1; width:100%; border:none; display:block;"></iframe>
   </div>
-  <div id="debug-log" class="debug-log"></div>
 
   <script>
 
-    // ============================================================
-    // DEBUG LOG (visible only with ?debug=1 in URL)
-    // ============================================================
-    var _showDebug = window.location.search.indexOf('debug=1') !== -1;
-    var _debugEl = document.getElementById('debug-log');
-    if (_showDebug && _debugEl) _debugEl.style.display = 'block';
-    function dbg(msg) {
-      console.log('[PWA] ' + msg);
-      if (_debugEl && _showDebug) {
-        _debugEl.innerHTML += '<div>' + new Date().toLocaleTimeString() + ' ' + msg + '</div>';
-        _debugEl.scrollTop = _debugEl.scrollHeight;
-      }
-    }
-
-    // ============================================================
-    // SAFE STORAGE
-    // ============================================================
     var safeStorage = {
         data: {},
         getItem: function(key) {
@@ -164,119 +119,92 @@
         }
     };
 
-    // ============================================================
-    // DETECT STANDALONE MODE (PWA on home screen)
-    // ============================================================
-    var isStandalone = (window.navigator.standalone === true) || window.matchMedia('(display-mode: standalone)').matches;
-    dbg('standalone=' + isStandalone + ' ua=' + navigator.userAgent.substring(0, 60));
-
-    // ============================================================
-    // GAS URL
-    // ============================================================
     var GAS_BASE_URL = "https://script.google.com/macros/s/AKfycbxBZPKys2bSUk6heqbQyHBIAbaOFd7TscW10mAg0o-ZEFQ35HOd4vcUEgS98Xb_NSz1LA/exec";
 
-    // Build URL with params
     function buildIframeUrl(extraParams) {
       var parts = [];
-      
       var locationParams = extraParams || window.location.search || '';
       if (locationParams && locationParams.charAt(0) === '?') {
         parts.push(locationParams.substring(1));
       } else if (locationParams) {
         parts.push(locationParams);
       }
-
-      // userId from PWA shell localStorage → URL param uid
       var savedUserId = safeStorage.getItem('pwa_user_id') || '';
       if (savedUserId) {
         parts.push('uid=' + encodeURIComponent(savedUserId));
       }
-
-      // Anti-cache
       parts.push('nocache=' + Date.now());
-
       return GAS_BASE_URL + '?' + parts.join('&');
     }
 
-    // ============================================================
-    // MAIN LOGIC
-    // ============================================================
     document.addEventListener("DOMContentLoaded", function () {
       var iframe = document.getElementById("app");
       var loadingEl = document.getElementById("loading");
+      var loadingText = document.getElementById("loading-text");
+      var iframeLoaded = false;
+      var retryCount = 0;
+      var maxRetries = 3;
       var appUrl = buildIframeUrl();
 
-      dbg('DOMContentLoaded. Building URL...');
-      dbg('URL=' + appUrl.substring(0, 80) + '...');
-
-      // ========================================================
-      // STANDALONE MODE: redirect directly to GAS URL
-      // iOS blocks cross-origin iframes in standalone PWA WebView.
-      // The ONLY reliable fix is to NOT use an iframe.
-      // ========================================================
-      if (isStandalone) {
-        dbg('STANDALONE mode detected → redirecting to GAS URL');
-        // Register SW first (for push notifications)
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(function(){});
-        }
-        // Redirect to GAS directly — no iframe, no black screen
-        window.location.replace(appUrl);
-        return;
-      }
-
-      // ========================================================
-      // BROWSER MODE: use iframe as before
-      // ========================================================
-      dbg('BROWSER mode → loading in iframe');
-
-      var iframeLoaded = false;
-
-      iframe.onload = function() {
-        dbg('iframe.onload fired');
-        iframeLoaded = true;
-        loadingEl.style.display = "none";
-      };
-
-      iframe.onerror = function(e) {
-        dbg('iframe.onerror: ' + (e && e.message || 'unknown'));
-      };
-
-      // Fallback timeout: if iframe doesn't load within 12 seconds
-      setTimeout(function() {
-        if (!iframeLoaded) {
-          dbg('TIMEOUT: iframe not loaded after 12s, showing fallback');
-          loadingEl.innerHTML = 
-            '<p style="font-size:16px;color:#e2e8f0;font-weight:bold;text-align:center;margin-bottom:8px;">Загрузка занимает больше времени</p>' +
-            '<p style="font-size:12px;color:#94a3b8;text-align:center;max-width:280px;">Возможно, проблема с подключением. Нажмите кнопку ниже.</p>' +
-            '<button class="fallback-btn" onclick="document.getElementById(\'app\').src=buildIframeUrl()">🔄 Повторить загрузку</button>' +
-            '<a href="' + GAS_BASE_URL + '" class="fallback-link" target="_blank">Открыть напрямую →</a>';
-        }
-      }, 12000);
-
-      // Load iframe
-      iframe.src = appUrl;
-
-      // ============================================================
-      // LISTEN postMessage FROM IFRAME (login / logout)
-      // ============================================================
+      // === HEARTBEAT: GAS page sends postMessage when alive ===
+      var heartbeatReceived = false;
       window.addEventListener('message', function(event) {
         if (!event.data || !event.data.type) return;
 
-        if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
-          safeStorage.setItem('pwa_user_id', String(event.data.userId));
-          dbg('AUTH_LOGIN userId=' + event.data.userId);
+        // Heartbeat from GAS page
+        if (event.data.type === 'GAS_HEARTBEAT') {
+          heartbeatReceived = true;
         }
 
+        // Auth events
+        if (event.data.type === 'AUTH_LOGIN' && event.data.userId) {
+          safeStorage.setItem('pwa_user_id', String(event.data.userId));
+        }
         if (event.data.type === 'AUTH_LOGOUT') {
           safeStorage.removeItem('pwa_user_id');
-          dbg('AUTH_LOGOUT');
         }
       });
 
-      // ============================================================
-      // Deep links from SW (push notification click)
-      // ============================================================
+      iframe.onload = function() {
+        iframeLoaded = true;
+        // Don't hide loading yet — wait for heartbeat from GAS
+        // or hide after a short delay
+        setTimeout(function() {
+          loadingEl.style.display = "none";
+        }, 1500);
+      };
+
+      function tryLoadIframe() {
+        retryCount++;
+        loadingText.textContent = retryCount > 1 ? 'Повторная загрузка (' + retryCount + ')...' : 'Запуск приложения...';
+        iframeLoaded = false;
+        heartbeatReceived = false;
+        iframe.src = buildIframeUrl();
+      }
+
+      // Initial load
+      tryLoadIframe();
+
+      // === AUTO-RETRY: if no heartbeat after 10s, reload iframe ===
+      setInterval(function() {
+        if (!heartbeatReceived && retryCount <= maxRetries) {
+          // No heartbeat — iframe content is dead, retry
+          tryLoadIframe();
+        }
+      }, 10000);
+
+      // === FALLBACK: after all retries, show manual button ===
+      setTimeout(function() {
+        if (!heartbeatReceived) {
+          loadingEl.innerHTML = 
+            '<p style="font-size:16px;color:#e2e8f0;font-weight:bold;text-align:center;margin-bottom:8px;">Не удалось загрузить</p>' +
+            '<p style="font-size:12px;color:#94a3b8;text-align:center;max-width:280px;margin-bottom:16px;">Попробуйте перезагрузить</p>' +
+            '<button class="retry-btn" onclick="location.reload()">🔄 Перезагрузить</button>';
+          loadingEl.style.display = "flex";
+        }
+      }, 35000);
+
+      // Deep links from SW
       if ('serviceWorker' in navigator && navigator.serviceWorker) {
         navigator.serviceWorker.addEventListener('message', function(event) {
           if (event.data && event.data.type === 'PUSH_NAVIGATE') {
@@ -291,12 +219,10 @@
         });
       }
 
-      // Force update Service Worker on every launch
+      // Register SW
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
-          .then(function(reg) {
-            reg.update();
-          })
+          .then(function(reg) { reg.update(); })
           .catch(function() {});
       }
     });
